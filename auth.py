@@ -1,24 +1,15 @@
-import os
 import requests
-from dotenv import load_dotenv
-
-load_dotenv()
-
-APP_KEY = os.getenv("NH_APP_KEY")
-APP_SECRET = os.getenv("NH_APP_SECRET")
+from credential_store import get_credentials
 
 TOKEN_URL = "https://api.nhplug.com:8443/oauth2/token"
 
 
 def get_access_token():
-    if not APP_KEY or not APP_SECRET:
-        raise RuntimeError(
-            "NH_APP_KEY와 NH_APP_SECRET을 .env에 설정해주세요."
-        )
+    app_key, app_secret = get_credentials()
 
     data = {
-        "appkey": APP_KEY,
-        "appsecretkey": APP_SECRET,
+        "appkey": app_key,
+        "appsecretkey": app_secret,
         "grant_type": "client_credentials",
         "scope": "oob",
     }
