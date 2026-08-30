@@ -14,16 +14,13 @@ def _response_error(response, app_key, app_secret):
     except (ValueError, requests.exceptions.JSONDecodeError):
         body = {}
 
+    body = body if isinstance(body, dict) else {}
     code = next(
-        (body.get(key) for key in ERROR_CODE_KEYS if isinstance(body, dict) and body.get(key)),
+        (body.get(key) for key in ERROR_CODE_KEYS if body.get(key)),
         "unavailable",
     )
     message = next(
-        (
-            body.get(key)
-            for key in ERROR_MESSAGE_KEYS
-            if isinstance(body, dict) and body.get(key)
-        ),
+        (body.get(key) for key in ERROR_MESSAGE_KEYS if body.get(key)),
         "unavailable",
     )
 
