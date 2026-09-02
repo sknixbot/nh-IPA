@@ -11,6 +11,7 @@ from auth import get_access_token
 
 WATCHLIST_PATH = Path("config/watchlist.txt")
 NH_API_BASE = "https://api.nhplug.com:8443"
+ACCOUNT_LIST_PATH = "/n2/acctinfo"
 DOMESTIC_BALANCE_PATH = "/krstock/inquiry/v1/balance"
 OVERSEAS_BALANCE_PATH = "/gbstock/inquiry/v1/balance"
 DOMESTIC_INVESTOR_PATH = "/krstock/quote/v1/currentInvestor"
@@ -29,6 +30,15 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return float(str(value).replace(",", ""))
     except Exception:
         return default
+
+
+def mask_account_no(account_no: str | None) -> str:
+    if not account_no:
+        return "********"
+    text = str(account_no).strip()
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{text[:3]}********{text[-2:]}"
 
 
 def _coerce_payload(payload: Dict[str, Any] | None) -> Dict[str, Any]:
@@ -158,6 +168,40 @@ def call_nh_rest_api(token: str, path: str, payload: Dict[str, Any]) -> Dict[str
     return response.json()
 
 
+def fetch_account_list(token: str, endpoint_url: str | None = None) -> List[str]:
+    if not token:
+        return []
+    url = endpoint_url or ACCOUNT_LIST_PATH
+    payload = {}
+    try:
+        data = call_nh_rest_api(token, url if url.startswith("/") else f"/{url}", payload)
+    except Exception:
+        return []
+
+    accounts: List[str] = []
+    for key in ("Output_0", "output_0", "output", "data"):
+        value = data.get(key) if isinstance(data, dict) else None
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    act_no = str(item.get("act_no") or item.get("account_no") or "").strip()
+                    if act_no:
+                        accounts.append(act_no)
+            if accounts:
+                return accounts
+        elif isinstance(value, dict):
+            for item in value.values():
+                if isinstance(item, list):
+                    for entry in item:
+                        if isinstance(entry, dict):
+                            act_no = str(entry.get("act_no") or entry.get("account_no") or "").strip()
+                            if act_no:
+                                accounts.append(act_no)
+                    if accounts:
+                        return accounts
+    return accounts
+
+
 def fetch_domestic_holdings(token: str, account_no: str | None = None, endpoint_url: str | None = None, payload: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
     if not account_no and not payload:
         print("미연결: 국내_주식_조회_잔고 계좌 번호가 설정되지 않았습니다.")
@@ -230,9 +274,19 @@ def detect_pair_trade_signal(payload: Dict[str, Any]) -> bool:
 
 
 def refresh_watchlist_from_api(token: str, domestic_account_no: str | None = None, overseas_account_no: str | None = None) -> List[str]:
-    domestic = fetch_domestic_holdings(token, account_no=domestic_account_no)
-    overseas = fetch_overseas_holdings(token, account_no=overseas_account_no)
-    positions = domestic + overseas
+    accounts = fetch_account_list(token)
+    domestic_accounts = [domestic_account_no] if domestic_account_no else accounts
+    overseas_accounts = [overseas_account_no] if overseas_account_no else accounts
+
+    domestic_positions: List[Dict[str, Any]] = []
+    for account in domestic_accounts:
+        domestic_positions.extend(fetch_domestic_holdings(token, account_no=account))
+
+    overseas_positions: List[Dict[str, Any]] = []
+    for account in overseas_accounts:
+        overseas_positions.extend(fetch_overseas_holdings(token, account_no=account))
+
+    positions = domestic_positions + overseas_positions
     return sync_watchlist_from_positions(positions)
 
 
