@@ -57,4 +57,5 @@ jobs:
         run: |
           gh issue create \
             --title "NH PLUG 수급 브리핑 $(date +'%Y-%m-%d %H:%M UTC')" \
-            --body-file output/summary.txt
+            --body-file output/summary.txt \
+            --assignee sknixbot

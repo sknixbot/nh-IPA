@@ -4,8 +4,10 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+
 import websockets
 
+from alerts import AlertState, emit_alert, process_foreign_net_buy_alert
 from auth import get_access_token
 
 WS_URL = "wss://api.nhplug.com:7070/websocket"
@@ -82,6 +84,7 @@ async def monitor(codes, seconds=600):
         return
 
     print(f"[시작] {len(codes)}종목 / {seconds}초")
+    foreign_state = AlertState()
 
     async with websockets.connect(
         WS_URL,
@@ -122,11 +125,29 @@ async def monitor(codes, seconds=600):
             if not isinstance(body, dict):
                 continue
 
-            # mg 실시간 데이터만 저장
             if "N_soonmaesu" not in body:
                 continue
 
             save(body)
+
+            foreign_net = int(float(body.get("N_soonmaesu", 0) or 0))
+            previous_foreign_net = foreign_state.last_foreign_net
+            if process_foreign_net_buy_alert(
+                foreign_state,
+                foreign_net,
+                previous_foreign_net,
+                threshold=500,
+                ratio_threshold=1.5,
+            ):
+                issue_text = (
+                    f"종목: {body.get('hname', body.get('code', ''))}\n"
+                    f"코드: {body.get('code', '')}\n"
+                    f"외국계 순매수: {foreign_net:,}주\n"
+                    f"직전 반영값: {previous_foreign_net:,}주\n"
+                    f"의미: 임계값 돌파 또는 직전 대비 의미 있는 증가 발생\n"
+                    f"수집시각: {datetime.now().isoformat(timespec='seconds')}"
+                )
+                emit_alert("외국계 순매수 급증", issue_text)
 
             print(
                 f"[{body.get('time','')}] "
