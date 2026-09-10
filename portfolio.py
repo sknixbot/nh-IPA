@@ -147,3 +147,15 @@ def refresh_watchlist_from_state():
         )
 
         return old_watchlist
+        
+        def load_watchlist(path=WATCHLIST_PATH):
+    if not path.exists():
+        return []
+
+    return [
+        x.strip()
+        for x in path.read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if x.strip()
+    ]
