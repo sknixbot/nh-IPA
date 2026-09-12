@@ -273,17 +273,6 @@ def detect_pair_trade_signal(payload: Dict[str, Any]) -> bool:
     return foreign_net > 0 and institution_total > 0
 
 
-def load_watchlist(path: Path = WATCHLIST_PATH) -> List[str]:
-    """watchlist 파일에서 종목 코드 리스트를 로드한다. 독립된 최상위 함수."""
-    if not path.exists():
-        return []
-    return [
-        x.strip()
-        for x in path.read_text(encoding="utf-8").splitlines()
-        if x.strip()
-    ]
-
-
 def refresh_watchlist_from_api(token: str, domestic_account_no: str | None = None, overseas_account_no: str | None = None) -> List[str]:
     accounts = fetch_account_list(token)
     domestic_accounts = [domestic_account_no] if domestic_account_no else accounts
@@ -301,91 +290,58 @@ def refresh_watchlist_from_api(token: str, domestic_account_no: str | None = Non
     return sync_watchlist_from_positions(positions)
 
 
+def load_watchlist(path: Path = WATCHLIST_PATH) -> List[str]:
+    if not path.exists():
+        return []
+    return [
+        x.strip()
+        for x in path.read_text(encoding="utf-8").splitlines()
+        if x.strip()
+    ]
+
+
 def refresh_watchlist_from_state() -> List[str]:
-    """
-    인증 및 계좌 정보로부터 watchlist를 새로고침한다.
-    - 인증 실패 시 기존 watchlist 유지
-    - API 조회 실패 시 기존 watchlist 유지
-    - 조회 결과가 없으면 기존 watchlist 유지
-    """
     old_watchlist = load_watchlist()
 
     try:
         token_data = get_access_token()
-    except Exception as e:
-        print(
-            f"[인증 실패] "
-            f"{type(e).__name__}: {e}"
-        )
+    except Exception as exc:
+        print(f"[인증 실패] {type(exc).__name__}: {exc}")
         return old_watchlist
 
-    if isinstance(token_data, dict):
-        token = token_data.get("access_token")
-    else:
-        token = token_data
-
+    token = token_data.get("access_token") if isinstance(token_data, dict) else token_data
     if not token:
-        print(
-            "[인증 실패] "
-            "access_token 없음"
-        )
+        print("[인증 실패] access_token 없음")
         return old_watchlist
 
-    domestic_account_no = (
-        os.getenv("NH_DOMESTIC_ACCOUNT_NO")
-        or os.getenv("NH_ACCOUNT_NO")
-    )
-
-    overseas_account_no = (
-        os.getenv("NH_OVERSEAS_ACCOUNT_NO")
-        or os.getenv("NH_ACCOUNT_NO")
-    )
+    domestic_account_no = os.getenv("NH_DOMESTIC_ACCOUNT_NO") or os.getenv("NH_ACCOUNT_NO")
+    overseas_account_no = os.getenv("NH_OVERSEAS_ACCOUNT_NO") or os.getenv("NH_ACCOUNT_NO")
 
     try:
         accounts = fetch_account_list(token)
-
-        if not domestic_account_no:
-            domestic_accounts = accounts
-        else:
-            domestic_accounts = [domestic_account_no]
-
-        if not overseas_account_no:
-            overseas_accounts = accounts
-        else:
-            overseas_accounts = [overseas_account_no]
-
-        positions = []
+        domestic_accounts = [domestic_account_no] if domestic_account_no else accounts
+        overseas_accounts = [overseas_account_no] if overseas_account_no else accounts
+        positions: List[Dict[str, Any]] = []
 
         for account in domestic_accounts:
             try:
-                holdings = fetch_domestic_holdings(
-                    token,
-                    account_no=account
-                )
-                positions.extend(holdings)
-            except Exception as e:
+                positions.extend(fetch_domestic_holdings(token, account_no=account))
+            except Exception as exc:
                 print(
-                    f"[국내잔고 조회 실패] "
-                    f"{mask_account_no(account)} "
-                    f"{type(e).__name__}: {e}"
+                    f"[국내잔고 조회 실패] {mask_account_no(account)} "
+                    f"{type(exc).__name__}: {exc}"
                 )
 
         for account in overseas_accounts:
             try:
-                holdings = fetch_overseas_holdings(
-                    token,
-                    account_no=account
-                )
-                positions.extend(holdings)
-            except Exception as e:
+                positions.extend(fetch_overseas_holdings(token, account_no=account))
+            except Exception as exc:
                 print(
-                    f"[해외잔고 조회 실패] "
-                    f"{mask_account_no(account)} "
-                    f"{type(e).__name__}: {e}"
+                    f"[해외잔고 조회 실패] {mask_account_no(account)} "
+                    f"{type(exc).__name__}: {exc}"
                 )
 
         new_codes = build_watchlist_from_positions(positions)
-
         if not new_codes:
             print(
                 "[계좌조회 결과 보유종목 없음 또는 조회 실패] "
@@ -394,17 +350,8 @@ def refresh_watchlist_from_state() -> List[str]:
             return old_watchlist
 
         sync_watchlist_from_positions(positions)
-
-        print(
-            f"[계좌 보유종목 동기화] "
-            f"{len(new_codes)}종목"
-        )
-
+        print(f"[계좌 보유종목 동기화] {len(new_codes)}종목")
         return new_codes
-
-    except Exception as e:
-        print(
-            f"[계좌조회 실패] "
-            f"{type(e).__name__}: {e}"
-        )
+    except Exception as exc:
+        print(f"[계좌조회 실패] {type(exc).__name__}: {exc}")
         return old_watchlist
