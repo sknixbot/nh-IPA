@@ -2,6 +2,10 @@
 name: NH PLUG Morning Monitor
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/nh-monitor.yml"
   workflow_dispatch:
 
   schedule:
