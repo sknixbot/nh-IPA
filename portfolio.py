@@ -163,7 +163,13 @@ def sync_watchlist_from_positions(positions: Iterable[Dict[str, Any]], path: Pat
 
 def call_nh_rest_api(token: str, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
-    response = requests.post(f"{NH_API_BASE}{path}", headers=headers, data=json.dumps(payload, ensure_ascii=False), timeout=20)
+    request_body = {"Input_0": payload}
+    response = requests.post(
+        f"{NH_API_BASE}{path}",
+        headers=headers,
+        data=json.dumps(request_body, ensure_ascii=False),
+        timeout=20,
+    )
     response.raise_for_status()
     return response.json()
 
@@ -189,7 +195,7 @@ def fetch_account_list(token: str, endpoint_url: str | None = None) -> List[str]
         if isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
-                    act_no = str(item.get("act_no") or item.get("account_no") or "").strip()
+                    act_no = str(item.get("acct_no") or item.get("act_no") or item.get("account_no") or "").strip()
                     if act_no:
                         accounts.append(act_no)
             if accounts:
@@ -199,7 +205,7 @@ def fetch_account_list(token: str, endpoint_url: str | None = None) -> List[str]
                 if isinstance(item, list):
                     for entry in item:
                         if isinstance(entry, dict):
-                            act_no = str(entry.get("act_no") or entry.get("account_no") or "").strip()
+                            act_no = str(entry.get("acct_no") or entry.get("act_no") or entry.get("account_no") or "").strip()
                             if act_no:
                                 accounts.append(act_no)
                     if accounts:
