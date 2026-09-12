@@ -175,7 +175,12 @@ def fetch_account_list(token: str, endpoint_url: str | None = None) -> List[str]
     payload = {}
     try:
         data = call_nh_rest_api(token, url if url.startswith("/") else f"/{url}", payload)
-    except Exception:
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "unknown"
+        print(f"[계좌목록 조회 실패] HTTP {status}")
+        return []
+    except Exception as exc:
+        print(f"[계좌목록 조회 실패] {type(exc).__name__}")
         return []
 
     accounts: List[str] = []
