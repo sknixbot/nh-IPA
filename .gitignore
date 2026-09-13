@@ -219,6 +219,8 @@ __marimo__/
 .env
 
 .token_cache.json
+data/bollinger_state.json
+data/bollinger_state.tmp
 output/
 logs/
 *.pyc

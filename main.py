@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 
 from alerts import alert_status_rows
+from bollinger_monitor import monitor_bollinger
 from monitor import monitor
 from export_excel import export
 from portfolio import (
@@ -94,7 +95,32 @@ def main():
         action="store_true"
     )
 
+    parser.add_argument(
+        "--bollinger",
+        action="store_true",
+        help="볼린저밴드 실시간 감시 모드"
+    )
+
+    parser.add_argument(
+        "--markets",
+        default="KR,US",
+        help="볼린저 감시 시장: KR, US 또는 KR,US"
+    )
+
     args = parser.parse_args()
+
+    if args.bollinger:
+        markets = {item.strip().upper() for item in args.markets.split(",") if item.strip()}
+        invalid = markets - {"KR", "US"}
+        if not markets or invalid:
+            raise ValueError(f"지원하지 않는 시장: {', '.join(sorted(invalid))}")
+        asyncio.run(
+            monitor_bollinger(
+                args.minutes * 60 if args.minutes > 0 else 0,
+                markets=markets,
+            )
+        )
+        return
 
     if args.selftest:
 

@@ -2,8 +2,10 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
+
+import requests
 
 
 @dataclass
@@ -48,8 +50,66 @@ def issue_title(prefix: str) -> str:
     return f"[{prefix}] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
 
-def create_github_issue(title: str, body: str, assignee: str = "sknixbot") -> bool:
+def _github_issue_exists(token: str, repository: str, marker: str) -> bool:
+    since = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    response = requests.get(
+        f"https://api.github.com/repos/{repository}/issues",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        params={"state": "all", "per_page": 100, "since": since},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return any(marker in str(item.get("body") or "") for item in response.json())
+
+
+def create_github_issue(
+    title: str,
+    body: str,
+    assignee: str = "sknixbot",
+    dedupe_key: str | None = None,
+) -> bool:
     """GitHub Issue 생성. 실제 주문 기능은 포함하지 않는다."""
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    repository = os.environ.get("GITHUB_REPOSITORY")
+    if token and repository:
+        try:
+            marker = f"<!-- alert-dedupe:{dedupe_key} -->" if dedupe_key else ""
+            if marker and _github_issue_exists(token, repository, marker):
+                print(f"GitHub Issue 중복 억제: {dedupe_key}")
+                return True
+            api_body = f"{body}\n\n{marker}" if marker else body
+            issue_payload = {"title": title, "body": api_body, "assignees": [assignee]}
+            response = requests.post(
+                f"https://api.github.com/repos/{repository}/issues",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                json=issue_payload,
+                timeout=15,
+            )
+            if response.status_code == 422:
+                issue_payload.pop("assignees", None)
+                response = requests.post(
+                    f"https://api.github.com/repos/{repository}/issues",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    json=issue_payload,
+                    timeout=15,
+                )
+            response.raise_for_status()
+            return True
+        except Exception as exc:
+            print(f"GitHub API Issue 생성 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+
     try:
         subprocess.run(
             [
@@ -74,7 +134,7 @@ def create_github_issue(title: str, body: str, assignee: str = "sknixbot") -> bo
         return False
 
 
-def emit_alert(alert_type: str, message: str) -> bool:
+def emit_alert(alert_type: str, message: str, dedupe_key: str | None = None) -> bool:
     title = issue_title(alert_type)
     body = (
         "자동 감지 알림\n\n"
@@ -83,7 +143,7 @@ def emit_alert(alert_type: str, message: str) -> bool:
         f"내용:\n{message}\n\n"
         "주의: 실제 주문 기능은 이 시스템에서 수행하지 않습니다."
     )
-    return create_github_issue(title, body)
+    return create_github_issue(title, body, dedupe_key=dedupe_key)
 
 
 ALERT_STATUS: Dict[str, str] = {
