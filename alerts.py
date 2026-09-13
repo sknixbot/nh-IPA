@@ -50,20 +50,42 @@ def issue_title(prefix: str) -> str:
     return f"[{prefix}] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
 
-def _github_issue_exists(token: str, repository: str, marker: str) -> bool:
-    since = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
-    response = requests.get(
-        f"https://api.github.com/repos/{repository}/issues",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        params={"state": "all", "per_page": 100, "since": since},
-        timeout=15,
+def _marker_counts(items, dedupe_marker: str, series_marker: str) -> tuple[bool, int]:
+    bodies = [str(item.get("body") or "") for item in items]
+    return (
+        bool(dedupe_marker) and any(dedupe_marker in body for body in bodies),
+        sum(bool(series_marker) and series_marker in body for body in bodies),
     )
-    response.raise_for_status()
-    return any(marker in str(item.get("body") or "") for item in response.json())
+
+
+def _github_issue_history(
+    token: str,
+    repository: str,
+    dedupe_marker: str,
+    series_marker: str,
+) -> tuple[bool, int]:
+    since = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    duplicate = False
+    repeat_count = 0
+    for page in range(1, 11):
+        response = requests.get(
+            f"https://api.github.com/repos/{repository}/issues",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            params={"state": "all", "per_page": 100, "page": page, "since": since},
+            timeout=15,
+        )
+        response.raise_for_status()
+        items = response.json()
+        page_duplicate, page_repeats = _marker_counts(items, dedupe_marker, series_marker)
+        duplicate = duplicate or page_duplicate
+        repeat_count += page_repeats
+        if len(items) < 100:
+            break
+    return duplicate, repeat_count
 
 
 def create_github_issue(
@@ -71,18 +93,38 @@ def create_github_issue(
     body: str,
     assignee: str = "sknixbot",
     dedupe_key: str | None = None,
+    repeat_key: str | None = None,
 ) -> bool:
     """GitHub Issue 생성. 실제 주문 기능은 포함하지 않는다."""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     repository = os.environ.get("GITHUB_REPOSITORY")
     if token and repository:
         try:
-            marker = f"<!-- alert-dedupe:{dedupe_key} -->" if dedupe_key else ""
-            if marker and _github_issue_exists(token, repository, marker):
+            dedupe_marker = f"<!-- alert-dedupe:{dedupe_key} -->" if dedupe_key else ""
+            series_marker = f"<!-- alert-series:{repeat_key} -->" if repeat_key else ""
+            duplicate, previous_repeats = (False, 0)
+            if dedupe_marker or series_marker:
+                duplicate, previous_repeats = _github_issue_history(
+                    token,
+                    repository,
+                    dedupe_marker,
+                    series_marker,
+                )
+            if dedupe_marker and duplicate:
                 print(f"GitHub Issue 중복 억제: {dedupe_key}")
                 return True
-            api_body = f"{body}\n\n{marker}" if marker else body
-            issue_payload = {"title": title, "body": api_body, "assignees": [assignee]}
+            repeat_count = previous_repeats + 1 if repeat_key else 1
+            markers = "\n".join(marker for marker in (dedupe_marker, series_marker) if marker)
+            body_parts = [body]
+            if repeat_key:
+                body_parts.append(f"동일 밴드 접촉 누적: {repeat_count}회")
+            if markers:
+                body_parts.append(markers)
+            issue_payload = {
+                "title": f"{title} · 접촉 {repeat_count}회" if repeat_key else title,
+                "body": "\n\n".join(body_parts),
+                "assignees": [assignee],
+            }
             response = requests.post(
                 f"https://api.github.com/repos/{repository}/issues",
                 headers={
@@ -134,7 +176,12 @@ def create_github_issue(
         return False
 
 
-def emit_alert(alert_type: str, message: str, dedupe_key: str | None = None) -> bool:
+def emit_alert(
+    alert_type: str,
+    message: str,
+    dedupe_key: str | None = None,
+    repeat_key: str | None = None,
+) -> bool:
     title = issue_title(alert_type)
     body = (
         "자동 감지 알림\n\n"
@@ -143,7 +190,12 @@ def emit_alert(alert_type: str, message: str, dedupe_key: str | None = None) -> 
         f"내용:\n{message}\n\n"
         "주의: 실제 주문 기능은 이 시스템에서 수행하지 않습니다."
     )
-    return create_github_issue(title, body, dedupe_key=dedupe_key)
+    return create_github_issue(
+        title,
+        body,
+        dedupe_key=dedupe_key,
+        repeat_key=repeat_key,
+    )
 
 
 ALERT_STATUS: Dict[str, str] = {

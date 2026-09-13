@@ -23,7 +23,7 @@ from bollinger import (
     format_event,
     load_symbol_configs,
 )
-from bollinger_market import KST, fetch_histories, parse_live_quote, refresh_configs_from_holdings
+from bollinger_market import ET, KST, fetch_histories, parse_live_quote, refresh_configs_from_holdings
 
 
 CONFIG_PATH = Path("config/bollinger_watchlist.json")
@@ -176,7 +176,9 @@ async def _run_market_stream(
                     if symbol != quote.symbol:
                         quote = replace(quote, symbol=symbol)
                     snapshot = calculate_snapshot(histories[symbol], quote.price, quote.volume)
-                    session_key = f"{quote.quote_time.astimezone(KST):%Y%m%d}:{quote.session_name}"
+                    market_zone = ET if market == "US" else KST
+                    session_key = f"{quote.quote_time.astimezone(market_zone):%Y%m%d}:{quote.session_name}"
+                    hour_key = quote.quote_time.astimezone(KST).strftime("%Y%m%d%H")
                     events = engine.evaluate(symbol, session_key, snapshot)
                     for event in events:
                         if not dedupe.allow(symbol, event.kind):
@@ -192,7 +194,10 @@ async def _run_market_stream(
                         emit_alert(
                             event_label(event.kind),
                             message_text,
-                            dedupe_key=f"{session_key}:{dedupe.family(symbol)}:{event.kind}",
+                            dedupe_key=(
+                                f"{session_key}:{dedupe.family(symbol)}:{event.kind}:{hour_key}"
+                            ),
+                            repeat_key=f"{session_key}:{dedupe.family(symbol)}:{event.kind}",
                         )
                         print(f"[볼린저 알림] {symbol} {event.kind} {quote.price}")
 

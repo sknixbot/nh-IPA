@@ -1,10 +1,13 @@
 import unittest
+from datetime import datetime
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from bollinger import SymbolConfig
 from bollinger_market import (
     _history_from_rows,
     fetch_domestic_history,
+    domestic_session_name,
     merge_configs_with_positions,
     parse_live_quote,
 )
@@ -50,6 +53,13 @@ class HistoryParserTest(unittest.TestCase):
 
 
 class QuoteParserTest(unittest.TestCase):
+    def test_domestic_aftermarket_session_name(self):
+        kst = ZoneInfo("Asia/Seoul")
+        self.assertEqual(
+            domestic_session_name(datetime(2026, 9, 14, 18, 0, tzinfo=kst)),
+            "한국 애프터마켓(KRX/NXT)",
+        )
+
     def test_domestic_trade_message(self):
         quote = parse_live_quote(
             {"header": {"tr_cd": "mc", "tr_key": "005930"}, "body": {"price": "81200", "volume": "12345"}},

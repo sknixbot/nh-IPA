@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 import os
 import re
 from typing import Any, Dict, Iterable, List, Sequence
@@ -20,6 +20,17 @@ DOMESTIC_DAILY_PATH = "/krstock/quote/v1/currentDaily"
 OVERSEAS_PERIOD_PATH = "/gbstock/quote/v1/period"
 KST = ZoneInfo("Asia/Seoul")
 ET = ZoneInfo("America/New_York")
+
+
+def domestic_session_name(quote_time: datetime) -> str:
+    current = quote_time.astimezone(KST).time()
+    if time(8, 0) <= current < time(8, 50):
+        return "한국 프리마켓(NXT)"
+    if time(9, 0) <= current <= time(15, 30):
+        return "한국 정규장"
+    if time(15, 40) <= current <= time(20, 0):
+        return "한국 애프터마켓(KRX/NXT)"
+    return "한국 시장"
 
 
 @dataclass(frozen=True)
@@ -253,7 +264,7 @@ def parse_live_quote(message: Dict[str, Any], market: str, delayed: bool) -> Liv
         symbol = _text(body, ("code", "iem_cd")) or _text(header, ("tr_key",))
         price = _float(body, ("price", "now_pr", "trdprc", "main_close"))
         volume = _float(body, ("volume", "acvol", "acml_vol"))
-        session = "한국 통합장"
+        session = domestic_session_name(datetime.now(KST))
     else:
         raw_symbol = _text(body, ("symbol", "iem_cd")) or _text(header, ("tr_key",))
         symbol = _text(body, ("ticker",)) or raw_symbol
