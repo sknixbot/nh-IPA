@@ -7,7 +7,7 @@ import re
 from typing import Any, Dict, Iterable, List, Sequence
 from zoneinfo import ZoneInfo
 
-from bollinger import MarketHistory, SymbolConfig
+from bollinger import MarketHistory, SymbolConfig, calculate_snapshot, classify_close_risk
 from portfolio import (
     call_nh_rest_api,
     fetch_account_list,
@@ -157,6 +157,21 @@ def fetch_histories(token: str, configs: Iterable[SymbolConfig]) -> Dict[str, Ma
                 continue
             result[config.symbol] = history
             print(f"[볼린저 기준값] {config.symbol}: 확정 종가 {len(history.closes)}개")
+            if len(history.closes) >= 20:
+                confirmed = MarketHistory(history.closes[:-1], history.volumes[:-1])
+                latest_volume = history.volumes[-1] if history.volumes else None
+                snapshot = calculate_snapshot(confirmed, history.closes[-1], latest_volume)
+                risks = ",".join(classify_close_risk(snapshot))
+                rsi = "NA" if snapshot.rsi14 is None else f"{snapshot.rsi14:.1f}"
+                volume_ratio = (
+                    "NA" if snapshot.volume_ratio20 is None else f"{snapshot.volume_ratio20:.2f}"
+                )
+                print(
+                    f"[종가 위험] {config.symbol}: 종가={snapshot.price:.4f} "
+                    f"%B={snapshot.percent_b:.3f} RSI={rsi} "
+                    f"SMA20={snapshot.sma20_direction} SMA60={snapshot.sma60_direction} "
+                    f"거래량비={volume_ratio} 판정={risks}"
+                )
         except Exception as exc:
             print(f"[볼린저 기준값 실패] {config.symbol}: {type(exc).__name__}: {exc}")
     return result

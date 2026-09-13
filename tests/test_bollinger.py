@@ -9,6 +9,7 @@ from bollinger import (
     MarketHistory,
     SymbolConfig,
     calculate_snapshot,
+    classify_close_risk,
     load_symbol_configs,
 )
 from bollinger_monitor import CompanyDedupe, _resolve_symbol
@@ -46,6 +47,23 @@ class BollingerCalculationTest(unittest.TestCase):
     def test_requires_nineteen_confirmed_closes(self):
         with self.assertRaises(ValueError):
             calculate_snapshot(MarketHistory(tuple([100.0] * 18)), 100.0)
+
+    def test_close_risk_combines_band_trend_rsi_and_volume(self):
+        result = IndicatorSnapshot(
+            price=111.0,
+            middle=100.0,
+            upper=110.0,
+            lower=90.0,
+            percent_b=1.05,
+            rsi14=75.0,
+            sma20_direction="하락",
+            sma60_direction="하락",
+            volume_ratio20=1.7,
+        )
+        self.assertEqual(
+            classify_close_risk(result),
+            ("상단돌파", "20·60일선동반하락", "RSI과열", "거래량급증"),
+        )
 
 
 class BollingerStateTest(unittest.TestCase):

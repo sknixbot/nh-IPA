@@ -158,6 +158,27 @@ def calculate_snapshot(
     )
 
 
+def classify_close_risk(snapshot: IndicatorSnapshot) -> tuple[str, ...]:
+    risks: List[str] = []
+    if snapshot.percent_b < 0:
+        risks.append("하단이탈")
+    elif snapshot.percent_b <= 0.10:
+        risks.append("하단근접")
+    if snapshot.percent_b > 1:
+        risks.append("상단돌파")
+    elif snapshot.percent_b >= 0.90:
+        risks.append("상단근접")
+    if snapshot.sma20_direction == "하락" and snapshot.sma60_direction == "하락":
+        risks.append("20·60일선동반하락")
+    if snapshot.rsi14 is not None and snapshot.rsi14 >= 70:
+        risks.append("RSI과열")
+    if snapshot.rsi14 is not None and snapshot.rsi14 <= 30:
+        risks.append("RSI과매도")
+    if snapshot.volume_ratio20 is not None and snapshot.volume_ratio20 >= 1.5:
+        risks.append("거래량급증")
+    return tuple(risks) or ("중립",)
+
+
 class BollingerAlertEngine:
     def __init__(self, state_path: Path = STATE_PATH, reentry_margin: float = 0.003):
         self.state_path = state_path
