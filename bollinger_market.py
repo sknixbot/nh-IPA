@@ -91,7 +91,7 @@ def fetch_domestic_history(token: str, symbol: str, count: int = 80) -> MarketHi
         {
             "market_cd": "UNT",
             "iem_cd": symbol,
-            "array_cnt": str(count),
+            "array_cnt": str(count).zfill(3),
             "view_main_yn": "Y",
         },
     )

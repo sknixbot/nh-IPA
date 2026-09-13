@@ -1,7 +1,13 @@
 import unittest
+from unittest.mock import patch
 
 from bollinger import SymbolConfig
-from bollinger_market import _history_from_rows, merge_configs_with_positions, parse_live_quote
+from bollinger_market import (
+    _history_from_rows,
+    fetch_domestic_history,
+    merge_configs_with_positions,
+    parse_live_quote,
+)
 
 
 class HistoryParserTest(unittest.TestCase):
@@ -30,6 +36,16 @@ class HistoryParserTest(unittest.TestCase):
             "20260912",
         )
         self.assertEqual(history.closes, (72000.0,))
+
+    @patch("bollinger_market.call_nh_rest_api")
+    def test_domestic_history_count_is_three_digits(self, call_api):
+        call_api.return_value = {
+            "Output_0": [
+                {"bsop_date": "26/09/11", "stck_clpr": "72000", "acml_vol": "100"}
+            ]
+        }
+        fetch_domestic_history("token", "005930", count=80)
+        self.assertEqual(call_api.call_args.args[2]["array_cnt"], "080")
 
 
 class QuoteParserTest(unittest.TestCase):
