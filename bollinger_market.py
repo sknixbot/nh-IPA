@@ -89,7 +89,8 @@ def fetch_domestic_history(token: str, symbol: str, count: int = 80) -> MarketHi
         token,
         DOMESTIC_DAILY_PATH,
         {
-            "market_cd": "UNT",
+            # 볼린저 기준은 정규장 확정 종가이므로 통합시장(UNT)이 아닌 KRX 일봉을 사용한다.
+            "market_cd": "KRX",
             "iem_cd": symbol,
             "array_cnt": str(count).zfill(3),
             "view_main_yn": "Y",

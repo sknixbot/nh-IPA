@@ -45,6 +45,7 @@ class HistoryParserTest(unittest.TestCase):
             ]
         }
         fetch_domestic_history("token", "005930", count=80)
+        self.assertEqual(call_api.call_args.args[2]["market_cd"], "KRX")
         self.assertEqual(call_api.call_args.args[2]["array_cnt"], "080")
 
 
