@@ -42,3 +42,5 @@ jobs:
           } > output/encrypted_issue_0918b.md
           gh issue create --title "PRIVATE ACCOUNT EXPORT 0918b ${{ github.run_id }}" \
             --body-file output/encrypted_issue_0918b.md --assignee sknixbot
+
+# retrigger current balance export
